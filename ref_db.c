@@ -34,10 +34,14 @@ void *ref_db_find(ref_db_t *rdb, uint8_t uuid[16])
 int ref_db_add(ref_db_t *rdb, uint8_t uuid[16], void *data, ref_db_entry_free_fn free_fn)
 {
     ref_db_entry_t *entry = malloc(sizeof(ref_db_entry_t));
+    if (entry == NULL) {
+        return 1;
+    }
     memcpy(entry->uuid, uuid, 16);
     entry->entry = data;
     entry->free_fn = free_fn;
     rdb->ll = ll_append(rdb->ll, entry);
+    return 0;
 }
 
 void free_entry(void *ptr)

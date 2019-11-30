@@ -5,11 +5,15 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include "file_writer.h"
-#include "linked_list.h"
-#include "klv.h"
-#include "batch.h"
+#include "utils/linked_list.h"
+#include "klv/klv.h"
+#include "klv/batch.h"
 #include "ul.h"
 #include "ref_db.h"
+#include "types/interchange_object.h"
+#include "types/preface.h"
+#include "types/material_package.h"
+#include "types/header_partition.h"
 
 void dump_auid(const char* prefix, uint8_t *bytes)
 {
@@ -24,7 +28,6 @@ void dump_auid(const char* prefix, uint8_t *bytes)
     }
     printf("\n");
 }
-
 
 void dump_batch(const char *prefix, batch_t *b)
 {
@@ -65,170 +68,8 @@ typedef struct {
 } local_tag_entry_t;
 
 typedef struct {
-    uint16_t major_version;
-    uint16_t minor_version;
-    uint32_t kag_size;
-    uint64_t this_partition;
-    uint64_t previous_partition;
-    uint64_t footer_partition;
-    uint64_t header_byte_count;
-    uint64_t index_byte_count;
-    uint32_t index_sid;
-    uint64_t body_offset;
-    uint32_t body_sid;
-    union {
-        ul_t operational_pattern;
-        uint8_t bytes[16];
-    } operation_pattern_u;
-    batch_t essence_containers;
-} mxf_header_partition_t;
-
-typedef struct {
-    /* UID */
-    uint8_t instance_uid[KLV_KEY_SIZE];
-    /* UID */
-    uint8_t generation_uid[KLV_KEY_SIZE];
-    /* AUID */
-    uint8_t object_class[KLV_KEY_SIZE];
-    /* Application Plugin Batch - Strong References */
-    batch_t application_plugins;
-} mxf_interchange_object_t;
-
-void mxf_interchange_object_init(mxf_interchange_object_t *io)
-{
-    bzero(io, sizeof(mxf_interchange_object_t));
-
-    batch_init(&io->application_plugins);
-}
-
-void mxf_interchange_object_destroy(mxf_interchange_object_t *io)
-{
-    printf("destroy I.O.\n");
-    batch_delete(&io->application_plugins, NULL);
-}
-
-void mxf_interchange_object_dump(mxf_interchange_object_t *io)
-{
-    dump_auid("instance_uid:          ", io->instance_uid);
-    dump_auid("generation_uid:        " , io->generation_uid);
-    dump_auid("object_class:          ", io->object_class);
-}
-
-typedef struct {
-    mxf_interchange_object_t interchange_object;
-    uint64_t last_modified_date;
-    uint16_t version_type;
-    uint32_t object_model_version;
-    uint8_t  primary_package[KLV_KEY_SIZE];
-    // array identifications
-    uint8_t  content_storage[KLV_KEY_SIZE];
-    union {
-        ul_t operational_pattern;
-        uint8_t bytes[16];
-    } operation_pattern_u;
-    batch_t essence_containers;
-    batch_t dm_schemes;
-    batch_t application_schemes;
-} mxf_preface_t;
-
-void mxf_preface_init(mxf_preface_t *preface)
-{
-    bzero(preface, sizeof(mxf_preface_t));
-    mxf_interchange_object_init(&preface->interchange_object);
-    batch_init(&preface->essence_containers);
-    batch_init(&preface->dm_schemes);
-    batch_init(&preface->application_schemes);
-}
-
-void mxf_preface_destroy(mxf_preface_t *preface)
-{
-    printf("destroy preface\n");
-
-    mxf_interchange_object_destroy(&preface->interchange_object);
-    batch_delete(&preface->essence_containers, NULL);
-    batch_delete(&preface->dm_schemes, NULL);
-    batch_delete(&preface->application_schemes, NULL);
-}
-
-void mxf_preface_dump(mxf_preface_t *preface)
-{
-    mxf_interchange_object_dump(&preface->interchange_object);
-    printf("last_modified_date:   %lu\n", preface->last_modified_date);
-    printf("version:               %u\n", preface->version_type);
-    printf("object_model_version:  %u\n", preface->object_model_version);
-    dump_auid("primary_package:       ", preface->primary_package);
-    dump_auid("content_storage:       ", preface->content_storage);
-    dump_auid("operational_pattern:   ", preface->operation_pattern_u.bytes);
-    dump_batch("essence_containers:    ", &preface->essence_containers);
-    dump_batch("dm_schemes:            ", &preface->dm_schemes);
-    dump_batch("application_schemes:   ", &preface->application_schemes);
-}
-
-typedef struct {
-    mxf_interchange_object_t interchange_object;
-    uint8_t package_uid[32];
-    // name
-    // package_creation_date
-    // package_modified_date
-    batch_t tracks;
-} mxf_generic_package_t;
-
-void mxf_generic_package_init(mxf_generic_package_t *gp)
-{
-    bzero(gp, sizeof(mxf_generic_package_t));
-    mxf_interchange_object_init(&gp->interchange_object);
-    batch_init(&gp->tracks);
-}
-
-void mxf_generic_package_destroy(mxf_generic_package_t *gp)
-{
-    printf("destroy generic package\n");
-    mxf_interchange_object_destroy(&gp->interchange_object);
-    batch_delete(&gp->tracks, NULL);
-}
-
-void mxf_generic_package_dump(mxf_generic_package_t *gp)
-{
-    mxf_interchange_object_dump(&gp->interchange_object);
-    dump_batch("tracks:               ", &gp->tracks);
-#if 0
-    printf("last_modified_date:  %lu\n", preface->last_modified_date);
-    printf("version:              %u\n", preface->version_type);
-    printf("object_model_version: %u\n", preface->object_model_version);
-    dump_auid("primary_package:       ", preface->primary_package);
-    dump_auid("content_storage:       ", preface->content_storage);
-    dump_auid("operational_pattern:   ", preface->operation_pattern_u.bytes);
-    dump_batch("essence_containers:   ", &preface->essence_containers);
-    dump_batch("dm_schemes:           ", &preface->dm_schemes);
-#endif
-}
-
-typedef struct {
-    mxf_generic_package_t generic_package;
-    uint8_t package_marker[KLV_KEY_SIZE];
-} mxf_material_package_t;
-
-void mxf_material_package_init(mxf_material_package_t *mp)
-{
-    bzero(mp, sizeof(mxf_material_package_t));
-    mxf_generic_package_init(&mp->generic_package);
-}
-
-void mxf_materal_package_destroy(mxf_material_package_t *mp)
-{
-    printf("destroy material package\n");
-    mxf_generic_package_destroy(&mp->generic_package);
-}
-
-void mxf_material_package_dump(mxf_material_package_t *mp)
-{
-    mxf_generic_package_dump(&mp->generic_package);
-    dump_auid("package_marker:        ", mp->package_marker);
-}
-
-typedef struct {
     batch_t local_tag_entries;
-    file_writer_t *out_stream;
+    file_writer_t out_stream;
     ref_db_t ref_db;
 } mxf_context_t;
 
@@ -237,48 +78,20 @@ void mxf_context_init(mxf_context_t *mxf)
     batch_init(&mxf->local_tag_entries);
     ref_db_init(&mxf->ref_db);
 
-    mxf->out_stream->fp = NULL;
+    mxf->out_stream.fp = NULL;
 }
 
 void mxf_context_destroy(mxf_context_t *mxf)
 {
     batch_delete(&mxf->local_tag_entries, NULL);
 
-    if (mxf->out_stream->fp != NULL) {
-        file_writer_close(mxf->out_stream);
+    if (mxf->out_stream.fp != NULL) {
+        file_writer_close(&mxf->out_stream);
     }
 
     ref_db_destroy(&mxf->ref_db);
 }
 
-void mxf_header_partition_init(mxf_header_partition_t *hp)
-{
-    bzero(hp, sizeof(mxf_header_partition_t));
-    batch_init(&hp->essence_containers);
-}
-
-void mxf_header_partition_destroy(mxf_header_partition_t *hp)
-{
-    batch_delete(&hp->essence_containers, NULL);
-}
-
-int mxf_header_partition_dump(mxf_header_partition_t *header_partition)
-{
-    printf("header_partition\r\n");
-    printf("major_version:            %d\n", header_partition->major_version);
-    printf("minor_version:            %d\n", header_partition->minor_version);
-    printf("kag_size:                 %d\n", header_partition->kag_size);
-    printf("this_partition:           %ld\n", header_partition->this_partition);
-    printf("previous_partition:       %ld\n", header_partition->previous_partition);
-    printf("footer_partition:         %ld\n", header_partition->footer_partition);
-    printf("header_byte_count:        %ld\n", header_partition->header_byte_count);
-    printf("index_byte_count:         %ld\n", header_partition->index_byte_count);
-    printf("index_sid:                %d\n", header_partition->index_sid);
-    printf("body_offset:              %ld\n", header_partition->body_offset);
-    printf("body_sid:                 %d\n", header_partition->body_sid);
-    dump_auid("operational_pattern:       ", header_partition->operation_pattern_u.bytes);
-    dump_batch("essence_containers:       ", &header_partition->essence_containers);
-}
 
 bool mxf_resolve_local_tag_entry(batch_t *tags, uint16_t key, uint8_t out[KLV_KEY_SIZE])
 {
@@ -562,12 +375,11 @@ int mxf_read_preface(klv_parser_t *parser, uint32_t klv_size, mxf_preface_t *pre
             klv_parser_skip(parser, size);
         }
 
-        // 2 bytes (local tag) + 2 bytes (size) + size bytes
-        n_read += (2 + 2 + size);
+        n_read += klv_get_full_local_tag_size(size);
 
         printf("n_read: %d (%d)\n", n_read, klv_size);
 
-    } while (n_read < klv_size);
+    } while (rc == 0 && n_read < klv_size);
 
     return 0;
 }
@@ -602,7 +414,7 @@ int mxf_read_material_package(klv_parser_t *parser, uint64_t klv_size, mxf_mater
             klv_parser_skip(parser, size);
         }
 
-        n_read += (2 + 2 + size);
+        n_read += klv_get_full_local_tag_size(size);
 
         printf("n_read: %d (%lu)\n", n_read, klv_size);
 
@@ -624,8 +436,6 @@ int mxf_parse_partition_header(klv_parser_t *parser, uint64_t partition_size)
     mxf = (mxf_context_t*)parser->context;
 
     while (rc == 0 && (n_read < partition_size)) {
-        printf("current pos in partition: %lu\n", n_read);
-
         rc = klv_parser_parse_key(parser, &klv);
         if (!mxf_test_key_is_valid_st377(&klv)) {
             fprintf(stderr, "invalid klv\n");
@@ -652,7 +462,9 @@ int mxf_parse_partition_header(klv_parser_t *parser, uint64_t partition_size)
             mxf_preface_dump(preface);
 
             ref_db_add(&mxf->ref_db, preface->interchange_object.instance_uid, preface, (ref_db_entry_free_fn)mxf_preface_destroy);
-        }  else if (mxf_test_ul_is_structural_metadata_instance(&klv, 0x01, 0x36 )) {
+        }  
+        //else if (mxf_test_ul_is_content_storage(&klv, 9))
+        else if (mxf_test_ul_is_structural_metadata_instance(&klv, 0x01, 0x36 )) {
             /* material package */
             printf("---> MATERIAL_PACKAGE\n");
             //klv_parser_skip(parser, klv.length);
@@ -667,11 +479,7 @@ int mxf_parse_partition_header(klv_parser_t *parser, uint64_t partition_size)
             klv_parser_skip(parser, klv.length);
         }
 
-        printf("add %lu\n", klv.length + 16 + 4);
-        printf("klv_length_type: %d\n", length_type);
-
-        // + <UL> + 4 (size of K+L)
-        n_read += (klv.length + 16 + 4);
+        n_read += klv_get_full_klv_size(&klv);
         printf("PARTITION READ (%lu/%lu)\n", n_read, partition_size);
     }
 
@@ -724,7 +532,7 @@ int mxf_parse_essence(klv_parser_t *parser)
      
     if (track_number == 369167617) {
 
-        if (file_writer_is_open(mxf->out_stream)) {
+        if (file_writer_is_open(&mxf->out_stream)) {
             tmp_data = malloc(klv.length);
             if (!tmp_data) {
                 fprintf(stderr, "error allocating data for essence stream\n");
@@ -737,7 +545,7 @@ int mxf_parse_essence(klv_parser_t *parser)
                 return rc;
             }
 
-            rc = file_writer_write(mxf->out_stream, tmp_data, klv.length);
+            rc = file_writer_write(&mxf->out_stream, (const char *) tmp_data, klv.length);
             if (rc) {
                 free(tmp_data);
                 return rc;
@@ -760,9 +568,6 @@ int mxf_parse_essence(klv_parser_t *parser)
 int mxf_parse_klv_value_field(klv_parser_t *parser, klv_t *klv)
 {
     int rc = 0;
-    mxf_context_t *mxf;
-
-    mxf = (mxf_context_t*)parser->context;
 
     if (!mxf_test_key_is_valid_st377(klv)) {
         fprintf(stderr, "invalid klv\n");
@@ -827,7 +632,7 @@ int main(int argc, char **argv)
     }
 
     if (argc >= 3) {
-        rc = file_writer_open(mxf.out_stream, argv[2]);
+        rc = file_writer_open(&mxf.out_stream, argv[2]);
         if (rc) {
             goto done;
         }

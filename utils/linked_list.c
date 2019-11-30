@@ -72,7 +72,7 @@ void *ll_get_at_index(linked_list_t *head, uint32_t idx)
 void ll_free(linked_list_t *ll, free_user_data_func_t freefn)
 {
     linked_list_t *head;
-    while (head = ll_poph(&ll)) {
+    while ((head = ll_poph(&ll)) != NULL) {
         void *res = head->user_data;
         if (freefn) {
             freefn(res);

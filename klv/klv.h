@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include "batch.h"
 
-#define KLV_KEY_SIZE    16
+#define KLV_KEY_SIZE                        16
+#define KLV_LOCAL_TAG_SIZE                  2
+#define KLV_LOCAL_TAG_LENGTH_FIELD_SIZE     2
 
 #define CHECK_FILE_ERROR(X) do{\
     if (feof(X) || ferror(X)) {\
@@ -75,7 +77,7 @@ typedef struct {
 } ul_item_designator_structural_metadata_t;
 
 typedef struct {
-    /* --- st 298 ---
+    /* --- st 298 --- */
     /* Object Identifier - Always x06 */
     uint8_t oid;
     /* 16-byte size of UL - Always 0x0E */
@@ -84,7 +86,7 @@ typedef struct {
     uint8_t ul_code;
     /* SMPTE Sub-Identifier - Always 0x34 */
     uint8_t smpte_designator;
-    /* --- st 336 ---
+    /* --- st 336 --- */
     /* Category designator identifying the category of registry defined (e.g. Dictionaries) */
     uint8_t category_designator;
     /* Registry designator identifying the register in a catogry (e.g. Metadata dictionaries) */
@@ -111,6 +113,8 @@ typedef struct klv_s {
     } key;
     /* variable length */
     uint64_t length;
+    /* size of length field */
+    uint16_t length_field_size;
 } klv_t;
 
 typedef enum {
@@ -151,5 +155,8 @@ int klv_parser_close(klv_parser_t *parser);
 klv_length_type_t klv_resolve_length_type_from_ul(ul_t *ul);
 int klv_parser_parse_length(klv_parser_t *parser, klv_t *klv, klv_length_type_t length_type);
 int klv_parser_parse_key(klv_parser_t *parser, klv_t *klv);
+
+uint16_t klv_get_full_local_tag_size(uint16_t size);
+uint64_t klv_get_full_klv_size(klv_t *klv);
 
 #endif

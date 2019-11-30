@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "linked_list.h"
+#include "utils/linked_list.h"
 
 typedef void (*ref_db_entry_free_fn)(void *);
 
