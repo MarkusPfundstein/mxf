@@ -118,7 +118,7 @@ bool mxf_test_ul_is_structural_metadata(klv_t *klv)
 {
         return (
             klv->key.layout.category_designator == KLV_CAT_DES_GROUPS &&
-            (klv->key.layout.registry_designator & 0x03) &&
+            (klv->key.layout.registry_designator & KLG_REG_DES_GROUPS_LOCAL_SETS) &&
             klv->key.layout.structure_designator == KLV_STRUCT_DES_GROUPS_SET_PACK_REGISTRY
         );
 }
@@ -155,21 +155,7 @@ bool mxf_test_ul_is_partition(klv_t *klv)
     );
 }
 
-int mxf_generic_package_read_track_ul(klv_parser_t *parser, uint32_t size, void **storage)
-{
-    int rc;
-    uint8_t *temp;
-    
-    temp = malloc(size);
-
-    rc = klv_read_bytes(parser, size, temp);
-
-    *storage = temp;
-
-    return rc;
-}
-
-int mxf_header_partition_read_essence_stream_ul(klv_parser_t *parser, uint32_t size, void **storage)
+int mxf_batch_read_bytes_cb(klv_parser_t *parser, uint32_t size, void **storage)
 {
     int rc;
     uint8_t *temp;
@@ -193,15 +179,7 @@ void mxf_dump_local_tag_entries(batch_t *local_tag_entries)
         }
         printf("tag entry:        ");
         printf("0x%04x -> ", tmp->local_tag);
-        for (int i = 0; i < KLV_KEY_SIZE; ++i)
-        {
-            printf("%02x", *(tmp->uid + i));
-            if (i < KLV_KEY_SIZE - 1)
-            {
-                printf(".");
-            }
-        }
-        printf("\n");
+        dump_auid("", tmp->uid);
     }
 }
 
@@ -219,7 +197,7 @@ int mxf_read_local_tag_entry(klv_parser_t *parser, uint32_t size, void **storage
     local_tag_entry = (local_tag_entry_t *)malloc(sizeof(local_tag_entry_t));
     
     rc |= klv_read_uint16(parser, &local_tag_entry->local_tag);
-    rc |= klv_read_bytes(parser, 16, local_tag_entry->uid);
+    rc |= klv_read_bytes(parser, KLV_KEY_SIZE, local_tag_entry->uid);
 
     *storage = local_tag_entry;
 
@@ -229,22 +207,6 @@ int mxf_read_local_tag_entry(klv_parser_t *parser, uint32_t size, void **storage
 int mxf_read_local_tag_entries(klv_parser_t *parser, batch_t *local_tag_entries)
 {
     return klv_read_batch(parser, local_tag_entries, mxf_read_local_tag_entry);
-}
-
-int mxf_read_application_plugin(klv_parser_t *parser, uint32_t size, void **storage)
-{
-    int rc;
-    uint8_t *temp;
-
-    printf("read app plugin: %d\n", size);
-    
-    temp = malloc(size);
-
-    rc = klv_read_bytes(parser, size, temp);
-
-    *storage = temp;
-
-    return rc;
 }
 
 int mxf_read_header_partition(klv_parser_t *parser, mxf_header_partition_t *header_partition)
@@ -263,7 +225,7 @@ int mxf_read_header_partition(klv_parser_t *parser, mxf_header_partition_t *head
     rc |= klv_read_uint64(parser, &header_partition->body_offset);
     rc |= klv_read_uint32(parser, &header_partition->body_sid);
     rc |= klv_read_ul_raw(parser, header_partition->operation_pattern_u.bytes);
-    rc |= klv_read_batch(parser, &header_partition->essence_containers, mxf_header_partition_read_essence_stream_ul);
+    rc |= klv_read_batch(parser, &header_partition->essence_containers, mxf_batch_read_bytes_cb);
 
     return rc;
 }
@@ -307,7 +269,7 @@ bool mxf_try_read_generic_package(klv_parser_t *parser, uint8_t entry_ul[KLV_KEY
     }
     else if (memcmp(entry_ul, MXF_UL_GENERIC_PACKAGE_TRACKS, KLV_KEY_SIZE) == 0) {
         printf("read tracks\n");
-        klv_read_batch(parser, &gp->tracks, mxf_generic_package_read_track_ul);
+        klv_read_batch(parser, &gp->tracks, mxf_batch_read_bytes_cb);
         return true;
     }
     return false;
@@ -363,11 +325,11 @@ int mxf_read_preface(klv_parser_t *parser, uint32_t klv_size, mxf_preface_t *pre
         } 
         else if (memcmp(entry_ul, MXF_UL_PREFACE_ESSENCE_CONTAINERS, KLV_KEY_SIZE) == 0) {
             printf("read essence_containers\n");
-            klv_read_batch(parser, &preface->essence_containers, mxf_header_partition_read_essence_stream_ul);
+            klv_read_batch(parser, &preface->essence_containers, mxf_batch_read_bytes_cb);
         } 
         else if (memcmp(entry_ul, MXF_UL_PREFACE_DM_SCHEMES, KLV_KEY_SIZE) == 0) {
             printf("read dm_schemes\n");
-            klv_read_batch(parser, &preface->dm_schemes, mxf_header_partition_read_essence_stream_ul);
+            klv_read_batch(parser, &preface->dm_schemes, mxf_batch_read_bytes_cb);
         } 
         else {
             printf("skip tag: %04x\n", local_tag);
